@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Taskipelago Graph</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='5' cy='6' r='3' fill='%234f6bed'/%3E%3Ccircle cx='5' cy='18' r='3' fill='%237c5cff'/%3E%3Ccircle cx='19' cy='12' r='3.4' fill='%23d99a06'/%3E%3Cpath d='M8 6c5 0 5 6 8 6M8 18c5 0 5-6 8-6' stroke='%2369707d' stroke-width='1.6' fill='none'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24"><circle cx="5" cy="6" r="3" fill="#4f6bed"/><circle cx="5" cy="18" r="3" fill="#7c5cff"/><circle cx="19" cy="12" r="3.4" fill="#d99a06"/><path d="M8 6c5 0 5 6 8 6M8 18c5 0 5-6 8-6" stroke="#9aa1ad" stroke-width="1.6" fill="none"/></svg>
+      <span>Taskipelago Graph</span>
+    </div>
+    <div class="tb-group">
+      <button class="btn icon-btn" id="b-undo" data-tip="Undo (Ctrl+Z)"><i data-icon="undo-2"></i></button>
+      <button class="btn icon-btn" id="b-redo" data-tip="Redo (Ctrl+Shift+Z)"><i data-icon="redo-2"></i></button>
+    </div>
+    <div class="search">
+      <i data-icon="search"></i>
+      <input id="search" placeholder="Find node…  ( / )" autocomplete="off" spellcheck="false">
+      <div class="search-results" id="search-results"></div>
+    </div>
+    <div class="spacer"></div>
+    <div class="tb-group">
+      <button class="btn" id="b-new" data-tip="Start a new graph"><i data-icon="file-plus"></i>New</button>
+      <button class="btn" id="b-open" data-tip="Open a Taskipelago YAML or a saved graph"><i data-icon="folder-open"></i>Open…</button>
+      <button class="btn" id="b-save" data-tip="Save the graph with its layout (.json)"><i data-icon="save"></i>Save graph</button>
+      <div class="tb-sep"></div>
+      <button class="btn" id="b-settings" data-tip="Player and slot options"><i data-icon="settings"></i>Slot settings</button>
+      <button class="btn icon-btn" id="b-theme" data-tip="Light / dark"><i data-icon="moon"></i></button>
+      <button class="btn icon-btn" id="b-help" data-tip="Controls"><i data-icon="circle-help"></i></button>
+      <button class="btn primary" id="b-export"><i data-icon="download"></i>Export YAML</button>
+    </div>
+    <input type="file" id="file-input" accept=".yaml,.yml,.json,.txt" hidden>
+  </header>
+
+  <nav id="palette">
+    <button class="pal-btn" data-place="task" data-tip="Task (T)"><i data-icon="circle-check"></i></button>
+    <button class="pal-btn" data-place="item" data-tip="Item (I)"><i data-icon="gem"></i></button>
+    <button class="pal-btn" data-place="region" data-tip="Region (R)"><i data-icon="map"></i></button>
+    <button class="pal-btn" data-place="group" data-tip="Item group (P)"><i data-icon="layers"></i></button>
+    <div class="pal-sep"></div>
+    <button class="pal-btn" data-place="gate-and" data-tip="AND gate (A)"><i data-icon="ampersand"></i></button>
+    <button class="pal-btn" data-place="gate-or" data-tip="OR gate (O)"><i data-icon="split"></i></button>
+    <button class="pal-btn" data-place="note" data-tip="Note"><i data-icon="sticky-note"></i></button>
+    <div class="pal-sep"></div>
+    <button class="pal-btn" id="b-layout" data-tip="Tidy layout of this level"><i data-icon="network"></i></button>
+    <button class="pal-btn" id="b-byregion" data-tip="Group each region's tasks into a meta-node"><i data-icon="group"></i></button>
+  </nav>
+
+  <main id="canvas">
+    <div id="world">
+      <svg id="edges"><defs></defs><g id="edge-layer"></g><path id="rubber" class="rubber" d=""/></svg>
+      <div id="nodes"></div>
+    </div>
+    <div class="crumbs" id="crumbs"></div>
+    <div class="modebar" id="modebar"><span id="modebar-text"></span><button class="btn" id="modebar-done">Done <span class="kbd" style="background:transparent;color:inherit;border-color:rgba(255,255,255,.3)">Esc</span> <span style="opacity:.7;font-size:11px">or right-click</span></button></div>
+    <div class="actionbar" id="actionbar" hidden></div>
+    <div class="statusbar">
+      <button class="pill" id="status-pill">Checking…</button>
+      <div class="pill slots" id="slots"></div>
+    </div>
+    <div class="problems" id="problems"></div>
+    <div class="zoombar">
+      <button class="btn icon-btn" id="z-out" data-tip="Zoom out (−)"><i data-icon="minus"></i></button>
+      <button class="btn zl" id="z-level" data-tip="Reset to 100%">100%</button>
+      <button class="btn icon-btn" id="z-in" data-tip="Zoom in (+)"><i data-icon="plus"></i></button>
+      <button class="btn icon-btn" id="z-fit" data-tip="Fit to screen (F)"><i data-icon="scan"></i></button>
+    </div>
+    <div class="empty-state" id="empty-state" hidden>
+      <div class="empty-card">
+        <h2>Build your Taskipelago slot as a graph</h2>
+        <p>Tasks, items, regions and item groups are nodes. Links say what unlocks what. Everything works with clicks and two-finger scrolling.</p>
+        <div class="row">
+          <button class="btn primary" id="es-example">Start from an example</button>
+          <button class="btn outline" id="es-open">Open a YAML…</button>
+          <button class="btn outline" id="es-blank">Blank graph</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <aside id="inspector"></aside>
+</div>
+
+<div class="modal-back" id="modal-back"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,2 @@
+Vendored from https://github.com/barretg/Taskipelago at commit f34c83fa8b6cb046985ecec082b0c985117a7765 (Sat Oct 17 12:35:57 2026 -0500).
+Local change: the two raw control bytes in vendor/js-yaml.min.js string literals (BEL, ESC) are written as \x07 and \x1b escapes, so the file is plain text. Same behavior.

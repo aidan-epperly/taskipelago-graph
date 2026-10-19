@@ -1,0 +1,12 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Round-trip test</title>
+<pre id="out">running…</pre>
+<script type="module">
+  import { runRoundTrip } from './roundtrip.js';
+  const files = (new URLSearchParams(location.search).get('files') || '').split(',').filter(Boolean);
+  runRoundTrip(files).then(r => {
+    window.__results = r;
+    document.getElementById('out').textContent = JSON.stringify(r, null, 2);
+  }).catch(e => { window.__results = { error: String(e.stack || e) }; });
+</script>
