@@ -86,16 +86,13 @@ def smoke(browser, url):
         return d.nodes[t.region]?.name; })()""")
     check(region_of == 'Bathroom', 'assign mode moves a task into the region')
 
-    # Sequence builder.
+    # Explode a task with copies into a chain of steps.
     page.click('.node.task >> text=Take out trash')
-    page.click('#inspector >> text=Make a sequence')
-    page.fill('#seq-n', '3')
-    page.click('#modal footer >> text=Create')
+    page.fill('#inspector label.field:has-text("Copies") input', '3')
+    page.click('#inspector >> text=Copies in order')
     one = page.evaluate("Object.values(window.__app.doc.nodes).filter(n => /^Take out trash/.test(n.name || '')).map(n => [n.name, n.count, n.sequential])")
-    check(one == [['Take out trash', 3, True]], f'sequence builder makes one sequential node by default {one}')
-    page.click('#inspector >> text=Make a sequence')
-    page.click('#seq-mode >> text=Separate nodes')
-    page.click('#modal footer >> text=Create')
+    check(one == [['Take out trash', 3, True]], f'copies in order make one sequential node {one}')
+    page.click('#inspector >> text=Explode as sequence')
     names = page.evaluate("Object.values(window.__app.doc.nodes).filter(n => /^Take out trash/.test(n.name || '')).map(n => n.name).sort()")
     check(names == ['Take out trash (1/3)', 'Take out trash (2/3)', 'Take out trash (3/3)'], f'separate mode makes chained steps {names}')
     chain = page.evaluate("""(() => { const d = window.__app.doc; const by = n => Object.values(d.nodes).find(x => x.name === n).id;
@@ -278,6 +275,28 @@ def smoke(browser, url):
         page.click(f'.node.task >> text={t}', modifiers=['Shift'])
     check('drops the rest' in page.inner_text('#inspector'), 'merging one ladder track warns that its rungs move')
     page.click('#crumbs >> text=Top level')
+    page.keyboard.press('Escape')
+
+    # Explode as copies: parallel tasks, each needed by what the original unlocked.
+    page.evaluate("""(async () => {
+      const G = await import('./js/graph.js'); const S = await import('./js/store.js');
+      const doc = G.emptyDoc(); doc.settings.playerName = 'Tester';
+      const add = (k, x, d, y = 0) => { const n = G.makeNode(k, x, y, d); doc.nodes[n.id] = n; return n; };
+      const pre = add('task', 0, { name: 'Shop' }); const t = add('task', 300, { name: 'Cook', count: 3 });
+      const all = add('task', 600, { name: 'Eat' }); const any = add('task', 600, { name: 'Nap', combine: 'or' }, 400);
+      const other = add('task', 300, { name: 'Read' }, 600);
+      G.addEdge(doc, pre.id, t.id); G.addEdge(doc, t.id, all.id); G.addEdge(doc, t.id, any.id); G.addEdge(doc, other.id, any.id);
+      S.replaceDoc(doc);
+    })()""")
+    page.click('.node.task >> text=Cook')
+    page.click('#inspector >> text=Explode as copies')
+    ex = page.evaluate("""(async () => { const { compile } = await import('./js/compile.js');
+      const m = compile(window.__app.doc).model; const t = n => m.tasks.find(x => x.name === n);
+      return { names: m.tasks.map(x => x.name).filter(n => n.startsWith('Cook')).sort(), pre: t('Cook #2').prereq,
+        eat: t('Eat').prereq, nap: t('Nap').prereq, counts: m.tasks.filter(x => x.name.startsWith('Cook')).map(x => x.count) }; })()""")
+    check(ex['names'] == ['Cook #1', 'Cook #2', 'Cook #3'] and ex['counts'] == [1, 1, 1] and ex['pre'] == '"Shop"', f'explode as copies makes parallel copies {ex}')
+    check(all(f'"Cook #{i}"' in ex['eat'] for i in (1, 2, 3)) and '||' not in ex['eat'], f'an all-of target needs every copy ({ex["eat"]})')
+    check('"Read"' in ex['nap'] and all(f'"Cook #{i}"' in ex['nap'] for i in (1, 2, 3)) and '||' in ex['nap'], f'an any-one target gets an AND gate ({ex["nap"]})')
     page.keyboard.press('Escape')
 
     # Cost from the side panel: a new currency gets amount x copies items.

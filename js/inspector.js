@@ -221,18 +221,21 @@ function taskPanel(n) {
   out.push(field('Description', text(n, 'desc', { area: true, max: MAX_TASK_DESCRIPTION_LEN, placeholder: 'Optional, shown under the task name' })));
   out.push(field('Region', select(n, 'region', [['', '— none —'], ...regions.map(r => [r.id, r.name || 'Untitled region'])])));
   const inOrder = check(n, 'sequential', 'Copies in order', 'each copy needs the one before', { disabled: (n.count || 1) < 2 });
+  const asSeq = h('button', { class: 'btn outline', disabled: (n.count || 1) < 2, onclick: () => cmd.explode(n.id, 'sequence') }, 'Explode as sequence');
+  const asCopies = h('button', { class: 'btn outline', disabled: (n.count || 1) < 2, onclick: () => cmd.explode(n.id, 'copies') }, 'Explode as copies');
   const copies = num(n, 'count', {
     min: 1, max: 999,
     after: () => {
       const off = (n.count || 1) < 2;
       inOrder.querySelector('input').disabled = off;
       inOrder.style.opacity = off ? '.5' : '';
+      asSeq.disabled = off;
+      asCopies.disabled = off;
     },
   });
-  out.push(h('div', { class: 'row2' },
-    field('Copies', copies, n.sequential && n.count > 1 ? 'Done one after another' : 'Interchangeable copies'),
-    h('div', { class: 'field' }, h('span', {}, ' '), h('button', { class: 'btn outline', onclick: () => cmd.makeSequence(n.id) }, 'Make a sequence…'))));
+  out.push(field('Copies', copies, n.sequential && n.count > 1 ? 'Done one after another' : 'Interchangeable copies'));
   out.push(inOrder);
+  out.push(h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px', title: 'Split the copies into separate task nodes' }, asSeq, asCopies));
   out.push(h('button', { class: 'btn outline', style: 'margin-bottom:10px', onclick: () => cmd.makeLadder([n.id]) }, 'Make a ladder…'));
   out.push(check(n, 'priority', 'Priority location', 'more likely to hold progression'));
   out.push(linksSection(n, 'in'));

@@ -44,9 +44,11 @@ Each task, region and the goal can need **all** of their requirements or **any o
 
 **Sequences** are one task node with several copies and *Copies in order* ticked (the
 YAML's `sequential` keyword): each copy needs the one before, and what the task unlocks
-waits for all of them. A YAML task using `sequential` opens as that one node. *Make a
-sequence…* in a task's panel builds one, or splits it into separate nodes, `X (1/n)` …
-`X (n/n)`, when the steps need their own descriptions or links. Selecting such a chain
+waits for all of them. A YAML task using `sequential` opens as that one node. *Explode
+as sequence* in a task's panel splits it into separate nodes, `X (1/n)` … `X (n/n)`, when
+the steps need their own descriptions or links. *Explode as copies* splits a task's copies
+into parallel nodes `X #1` … `X #n`, each with the original's requirements and costs; what
+the task unlocked still needs all of them. Selecting such a chain
 offers *Merge into one sequential task*, and opening a graph that has split chains
 offers to merge them all.
 

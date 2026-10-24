@@ -283,46 +283,53 @@ function doUngroup(metaId) {
   select(kids);
 }
 
-function makeSequence(id) {
+/** Split a task with copies into separate nodes: a chain of steps, or parallel copies. */
+function explode(id, mode) {
   const t = app.doc.nodes[id];
-  const base = (t.name || 'Step').replace(/\s*\(\d+\/\d+\)$/, '');
-  let mode = 'one';
-  const body = document.createElement('div');
-  body.innerHTML = `<div class="field"><span>Show the steps as</span><div class="seg" id="seq-mode">
-      <button type="button" data-m="one" class="on">One node</button><button type="button" data-m="many">Separate nodes</button></div></div>
-    <div class="row2"><label class="field"><span>Steps</span><input class="inp" type="number" min="2" max="100" value="${Math.max(2, t.count || 3)}" id="seq-n"></label>
-    <label class="field"><span>Name</span><input class="inp" value="${esc(base)}" id="seq-name"></label></div>
-    <p class="hint" id="seq-prev" style="margin:0"></p>`;
-  const n = body.querySelector('#seq-n');
-  const name = body.querySelector('#seq-name');
-  const prev = body.querySelector('#seq-prev');
-  const upd = () => {
-    const k = Math.max(2, Number(n.value) || 2);
-    prev.textContent = mode === 'one'
-      ? `One task node, “${name.value}”, with ${k} copies done in order (the YAML's sequential keyword). What it unlocks waits for all ${k}.`
-      : `${k} task nodes: ${name.value} (1/${k}), ${name.value} (2/${k}), … ${name.value} (${k}/${k}), each requiring the one before. Each step can then have its own description and links. What it unlocks moves to the last step.`;
-  };
-  body.querySelector('#seq-mode').addEventListener('click', e => {
-    const b = e.target.closest('[data-m]');
-    if (!b) return;
-    mode = b.dataset.m;
-    for (const x of body.querySelectorAll('[data-m]')) x.classList.toggle('on', x === b);
-    upd();
-  });
-  n.oninput = upd; name.oninput = upd; upd();
-  modal('Make a sequence', body, [{ label: 'Cancel' }, {
-    label: 'Create', cls: 'primary', onclick: () => {
-      const k = Math.min(100, Math.max(2, Number(n.value) || 2));
-      const nm = name.value.trim() || base;
-      if (mode === 'one') {
-        commit(doc => { Object.assign(doc.nodes[id], { name: nm, count: k, sequential: true }); });
-        select([id]);
-      } else {
-        select(commit(doc => sequence(doc, id, k, nm), { inspector: false }));
-      }
-      return false;
-    },
-  }]);
+  const k = Math.max(1, t?.count || 1);
+  if (k < 2) return;
+  const base = (t.name || 'Task').trim();
+  const ids = commit(doc => (mode === 'sequence' ? sequence(doc, id, k, base) : copies(doc, id, k, base)), { inspector: false });
+  select(ids);
+  toast(mode === 'sequence'
+    ? `Split into ${k} steps, each needing the one before. What it unlocked now follows the last step.`
+    : `Split into ${k} separate copies. What it unlocked still needs all ${k}.`, { action: 'Undo', onAction: undo });
+}
+
+/**
+ * Parallel copies "X #1" … "X #k": each keeps the original's requirements and
+ * costs, and whatever the original unlocked needs every copy. A target that
+ * needs any one of its inputs gets an AND gate in front, so its logic is unchanged.
+ */
+function copies(doc, id, k, base) {
+  const t = doc.nodes[id];
+  const h = (app.sizes.get(id)?.h || 64) + 30;
+  const ins = Object.values(doc.edges).filter(e => e.to === id);
+  const outs = Object.values(doc.edges).filter(e => e.from === id && e.kind === 'req');
+  t.name = `${base} #1`;
+  t.count = 1;
+  t.sequential = false;
+  const ids = [t.id];
+  for (let i = 2; i <= k; i++) {
+    const c = { ...structuredClone(t), id: newId('t'), name: `${base} #${i}`, y: t.y + h * (i - 1) };
+    doc.nodes[c.id] = c;
+    for (const e of ins) addEdge(doc, e.from, c.id, e.kind, structuredClone(e.cond));
+    ids.push(c.id);
+  }
+  for (const e of outs) {
+    const x = doc.nodes[e.to];
+    const needsAll = x.kind === 'gate' ? x.op === 'and' : x.combine !== 'or';
+    if (needsAll) {
+      for (const cid of ids.slice(1)) addEdge(doc, cid, x.id, 'req', structuredClone(e.cond));
+      continue;
+    }
+    const g = makeNode('gate', t.x + (app.sizes.get(id)?.w || WIDTH.task) + 60, t.y + h * (k - 1) / 2, { op: 'and' });
+    g.parent = t.parent;
+    doc.nodes[g.id] = g;
+    for (const cid of ids) addEdge(doc, cid, g.id);
+    e.from = g.id;
+  }
+  return ids;
 }
 
 function sequence(doc, id, k, base) {
@@ -1287,7 +1294,7 @@ $('es-blank').onclick = () => { app.emptyDismissed = true; render(); };
 window.addEventListener('resize', () => positionActionBar());
 
 initInspector({
-  navigateTo, selectEdge, startLink, makeSequence, enter, ungroup: doUngroup, deleteSelection, groupSelection,
+  navigateTo, selectEdge, startLink, explode, enter, ungroup: doUngroup, deleteSelection, groupSelection,
   layoutSelection, setRegion, setGroup, openSettings: settingsDialog,
   selectOnly: id => select([id]), assignSelectionTo: startAssign, chainOf, mergeChain, makeLadder,
   mergeIsLossless: ids => { const order = chainOf(ids); return !!order && mergeIsLossless(app.doc, order); },
