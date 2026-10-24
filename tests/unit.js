@@ -1,6 +1,7 @@
 // Unit checks for the compiler, generation rules and the YAML round trip.
 
-import { addEdge, emptyDoc, goalNode, makeNode } from '../js/graph.js';
+import { addEdge, emptyDoc, goalNode, groupInto, makeNode } from '../js/graph.js';
+import { randomizeMeta } from '../js/randomize.js';
 import { compile, exportYaml } from '../js/compile.js';
 import { importYaml, withEmbeddedLayout } from '../js/importer.js';
 import { exampleDoc } from '../js/example.js';
@@ -167,6 +168,45 @@ export async function runUnit() {
     return (rows(A) === rows(B) && JSON.stringify(normAnd(A.goal_tasks)) === JSON.stringify(normAnd(B.goal_tasks))
       && JSON.stringify(A.region_prereqs) === JSON.stringify(B.region_prereqs))
       || JSON.stringify({ rowsSame: rows(A) === rows(B), goal: [A.goal_tasks, B.goal_tasks], rp: [A.regions, A.region_prereqs, B.regions, B.region_prereqs] });
+  });
+
+  await t('a random meta-node is a full-depth DAG with no redundant links', async () => {
+    let seed = 7;
+    const rng = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+    for (const [n, depth, extra] of [[12, 4, 2], [7, 7, 1], [9, 1, 3], [10, 3, 0]]) {
+      const doc = emptyDoc();
+      doc.settings.playerName = 'Tester';
+      const ids = [];
+      for (let i = 0; i < n; i++) { const x = makeNode('task', i * 10, 0, { name: `T${i}` }); doc.nodes[x.id] = x; ids.push(x.id); }
+      const outside = makeNode('task', -500, 0, { name: 'Before' });
+      doc.nodes[outside.id] = outside;
+      const meta = groupInto(doc, ids, 'R');
+      addEdge(doc, ids[0], ids[1]); // an old inner link, replaced
+      addEdge(doc, outside.id, meta.input);
+      const r = randomizeMeta(doc, meta.id, { depth, extra }, rng);
+      if (r.layers !== depth) return `layers ${r.layers} != ${depth}`;
+      const succ = new Map();
+      for (const e of Object.values(doc.edges)) (succ.get(e.from) || succ.set(e.from, []).get(e.from)).push(e.to);
+      // The longest Input -> Output path has depth tasks (extra links may skip layers).
+      const lens = new Set();
+      const walk = (id, k, seen) => {
+        if (seen.has(id)) throw new Error('cycle');
+        if (id === meta.output) { lens.add(k); return; }
+        for (const nx of succ.get(id) || []) walk(nx, k + (doc.nodes[nx].kind === 'task' ? 1 : 0), new Set(seen).add(id));
+      };
+      walk(meta.input, 0, new Set());
+      if (Math.max(...lens) !== depth) return `longest path ${Math.max(...lens)} for depth ${depth}`;
+      for (const id of ids) {
+        if (!Object.values(doc.edges).some(e => e.to === id) || !(succ.get(id) || []).length) return `${doc.nodes[id].name} is off the Input -> Output paths`;
+      }
+      // No link p -> u when u is reachable from p some other way.
+      const reach = (a, b, skip) => (succ.get(a) || []).some(x => x !== skip && (x === b || reach(x, b, null)));
+      for (const e of Object.values(doc.edges)) if (reach(e.from, e.to, e.to)) return `redundant link ${doc.nodes[e.from].name} -> ${doc.nodes[e.to].name}`;
+      if (!Object.values(doc.edges).some(e => e.from === outside.id && e.to === meta.input)) return 'outside link was dropped';
+      const c = compile(doc);
+      if (errorsOf(c).length) return errorsOf(c).join('; ');
+    }
+    return true;
   });
 
   return results;

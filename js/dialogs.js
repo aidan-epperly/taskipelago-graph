@@ -162,6 +162,7 @@ export function helpDialog() {
       <dt>Meta-nodes</dt><dd>${k('G')} groups the selection. “Open ›”, a double-click or ${k('Enter')} opens one; links into the card go to its Input and links out start at its Output (unwired: every task inside done); ${k('Esc')} or the breadcrumb goes back up. Links leaving a meta-node show as dashed ghost nodes you can click to jump.</dd>
       <dt>Sequences</dt><dd>Give a task several copies and tick “Copies in order”: one node whose copies are done one after another. “Make a sequence…” can also split it into separate step nodes, and selecting a chain of steps offers to merge it back.</dd>
       <dt>Ladders</dt><dd>“Make a ladder…” builds two tracks of steps where step <i>k</i> of the second needs step <i>k</i> of the first. Select two tasks to build the ladder from them. Ladders are never offered for merging, since that would drop the rungs.</dd>
+      <dt>Random links</dt><dd>“Random meta-node…” on a selection, or “Randomize links…” on a meta-node, links the tasks inside at random into layers from Input to Output, for deep tasks with many prerequisites. “Reroll” in the message tries another draw.</dd>
       <dt>Costs</dt><dd>“+ Cost” in a task's panel spends an existing currency or creates a new one, with enough copies to pay for every copy of the task.</dd>
       <dt>Find</dt><dd>${k('/')} searches every node, inside meta-nodes too.</dd>
       <dt>Undo</dt><dd>${k('Ctrl')}+${k('Z')}, redo ${k('Ctrl')}+${k('Shift')}+${k('Z')}. ${k('Delete')} removes the selection.</dd>

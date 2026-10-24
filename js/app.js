@@ -7,6 +7,7 @@ import {
 import { exportYaml, linkMessage } from './compile.js';
 import { importYaml, withEmbeddedLayout } from './importer.js';
 import { layoutLevel } from './layout.js';
+import { defaultDepth, randomizeMeta, randomUnits } from './randomize.js';
 import { exampleDoc } from './example.js';
 import { fillIcons, icon } from './icons.js';
 import { app, commit, redo, replaceDoc, select, selectedNodes, setHooks, undo, view } from './store.js';
@@ -190,6 +191,54 @@ function groupSelection() {
   if (!ids.length) return;
   const meta = commit(doc => groupInto(doc, ids, 'New group'), { inspector: false });
   if (meta) { select([meta.id]); focusName(); }
+}
+
+/**
+ * Randomly link the tasks inside a meta-node from its Input to its Output.
+ * `metaId` rewires an existing meta-node; otherwise `ids` are grouped into a new one first.
+ */
+function randomizeDialog({ metaId = null, ids = [] } = {}) {
+  const doc = app.doc;
+  const n = metaId ? randomUnits(doc, metaId).length
+    : ids.filter(id => ['task', 'meta'].includes(doc.nodes[id]?.kind)).length;
+  if (n < 2) { toast('Needs at least two tasks to link.'); return; }
+  const body = document.createElement('div');
+  body.innerHTML = `<p class="muted" style="margin-top:0">Shuffles the ${n} tasks into layers. Each task needs one from the layer before (the first layer hangs off Input), each one leads into the next layer, and the last layer feeds Output.</p>
+    <div class="row2"><label class="field"><span>Depth (layers)</span><input class="inp" type="number" min="1" max="${n}" id="rnd-depth" value="${defaultDepth(n)}"></label>
+    <label class="field"><span>Extra prerequisites</span><input class="inp" type="number" min="0" max="5" id="rnd-extra" value="1"></label></div>
+    <p class="hint" id="rnd-prev" style="margin:0"></p>`;
+  const $b = s => body.querySelector(s);
+  const opts = () => ({
+    depth: Math.min(n, Math.max(1, Number($b('#rnd-depth').value) || 1)),
+    extra: Math.min(5, Math.max(0, Number($b('#rnd-extra').value) || 0)),
+  });
+  const upd = () => {
+    const { depth, extra } = opts();
+    $b('#rnd-prev').textContent = `${depth} layer${depth === 1 ? '' : 's'} of about ${Math.round(n / depth * 10) / 10} tasks. `
+      + (extra ? `Each task also gets up to ${extra} more prerequisite${extra === 1 ? '' : 's'} from any earlier layer. ` : '')
+      + (metaId ? 'Replaces the links between the tasks inside.' : '');
+  };
+  $b('#rnd-depth').oninput = upd; $b('#rnd-extra').oninput = upd; upd();
+  modal(metaId ? 'Randomize links' : 'Random meta-node', body, [{ label: 'Cancel' }, {
+    label: 'Randomize', cls: 'primary', onclick: () => { randomize(metaId, ids, opts()); return false; },
+  }]);
+}
+
+function randomize(metaId, ids, opts) {
+  const out = commit(doc => {
+    const meta = metaId ? doc.nodes[metaId] : groupInto(doc, ids, 'Random tasks');
+    if (!meta) return null;
+    const r = randomizeMeta(doc, meta.id, opts);
+    layoutLevel(doc, meta.id, app.sizes);
+    return r && { ...r, id: meta.id };
+  }, { inspector: false });
+  if (!out) return;
+  delete app.views[out.id]; // fit the new layout when it is opened
+  select([out.id]);
+  toast(`Linked in ${out.layers} layer${out.layers === 1 ? '' : 's'} (${out.links} links). Open the meta-node to see them.`, {
+    action: 'Reroll',
+    onAction: () => { undo(); randomize(metaId, ids, opts); },
+  });
 }
 
 function enter(metaId) {
@@ -1242,7 +1291,7 @@ initInspector({
   layoutSelection, setRegion, setGroup, openSettings: settingsDialog,
   selectOnly: id => select([id]), assignSelectionTo: startAssign, chainOf, mergeChain, makeLadder,
   mergeIsLossless: ids => { const order = chainOf(ids); return !!order && mergeIsLossless(app.doc, order); },
-  addCost,
+  addCost, randomizeDialog,
 });
 
 // ------------------------------------------------------------------ boot

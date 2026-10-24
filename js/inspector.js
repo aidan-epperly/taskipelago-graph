@@ -382,7 +382,8 @@ function metaPanel(n) {
     field('Name', name),
     h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' },
       h('button', { class: 'btn primary', onclick: () => cmd.enter(n.id) }, 'Open'),
-      h('button', { class: 'btn outline', onclick: () => cmd.ungroup(n.id) }, 'Ungroup')),
+      h('button', { class: 'btn outline', onclick: () => cmd.ungroup(n.id) }, 'Ungroup'),
+      h('button', { class: 'btn outline', onclick: () => cmd.randomizeDialog({ metaId: n.id }) }, 'Randomize links…')),
     help(h('p', {}, 'Links into this card go to the meta-node’s Input, and links out of it start at its Output; open it to wire them to the nodes inside. An Output with nothing linked into it means every task inside is done.')),
     portLinks(n, 'input'), portLinks(n, 'output'),
     section(`Contents (${all.length})`, ...kids.slice(0, 60).map(k => relRow(k, k.kind))),
@@ -472,6 +473,7 @@ function multiPanel(nodes) {
   out.push(h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-top:10px' },
     h('button', { class: 'btn primary', onclick: () => cmd.groupSelection() }, 'Group into meta-node'),
     h('button', { class: 'btn outline', onclick: () => cmd.layoutSelection() }, 'Tidy'),
+    tasks.length >= 2 && h('button', { class: 'btn outline', onclick: () => cmd.randomizeDialog({ ids: nodes.map(x => x.id) }) }, 'Random meta-node…'),
     nodes.length === 2 && nodes.every(x => x.kind === 'task') && h('button', { class: 'btn outline', onclick: () => cmd.makeLadder(nodes.map(x => x.id)) }, 'Make a ladder from these…'),
     cmd.chainOf(nodes.map(x => x.id)) && h('button', { class: 'btn outline', onclick: () => cmd.mergeChain(nodes.map(x => x.id)) }, 'Merge into one sequential task'),
     h('button', { class: 'btn danger outline', onclick: () => cmd.deleteSelection() }, 'Delete')));

@@ -56,6 +56,12 @@ builds one from that task, and with two tasks selected *Make a ladder from these
 The steps are separate nodes, since a single YAML row cannot tie copy *k* to copy *k*, and
 the ladder is wrapped in a meta-node by default to keep the canvas tidy.
 
+**Random meta-nodes** make deep tasks with many prerequisites. Select some tasks and pick
+*Random meta-node…*, or pick *Randomize links…* on a meta-node. The tasks inside are shuffled
+into layers. Each one needs a task from the layer before (the first layer hangs off Input),
+leads into the next layer, and can get extra prerequisites from earlier layers. The last
+layer feeds Output. *Reroll* draws again.
+
 ### Controls (trackpad first; dragging works but is never needed)
 
 | | |

@@ -301,6 +301,34 @@ def smoke(browser, url):
     check('spend 2' in page.inner_text('#inspector'), 'the new cost is listed in the panel')
     page.keyboard.press('Escape')
 
+    # Random meta-node from a selection of unrelated tasks.
+    page.evaluate("""(async () => {
+      const G = await import('./js/graph.js'); const S = await import('./js/store.js');
+      const doc = G.emptyDoc(); doc.settings.playerName = 'Tester';
+      for (let i = 0; i < 10; i++) { const t = G.makeNode('task', 0, i * 90, { name: `Chore ${i + 1}` }); doc.nodes[t.id] = t; }
+      S.replaceDoc(doc);
+    })()""")
+    page.keyboard.press('Control+a')
+    page.click('#inspector >> text=Random meta-node')
+    page.fill('#rnd-depth', '4')
+    page.click('#modal footer >> text=Randomize')
+    page.wait_for_timeout(500)
+    rnd = page.evaluate("""(() => { const d = window.__app.doc; const m = Object.values(d.nodes).find(n => n.kind === 'meta');
+      const tasks = Object.values(d.nodes).filter(n => n.kind === 'task');
+      return { inside: tasks.every(t => t.parent === m?.id), links: Object.keys(d.edges).length >= 10 }; })()""")
+    check(rnd == {'inside': True, 'links': True}, f'Random meta-node groups and links the tasks {rnd}')
+    probs = page.evaluate("""(async () => { const { exportYaml } = await import('./js/compile.js'); return (await exportYaml(window.__app.doc)).problems.filter(p => p.level === 'error').map(p => p.msg); })()""")
+    check(not probs, f'the random meta-node exports cleanly {probs}')
+    check('Reroll' in page.inner_text('#toast'), 'the result offers a reroll')
+    page.click('#toast >> text=Reroll')
+    page.wait_for_timeout(300)
+    check(page.evaluate("Object.values(window.__app.doc.nodes).filter(n => n.kind === 'meta').length") == 1, 'reroll replaces the draw instead of adding a second meta-node')
+    page.click('.node.meta >> text=Random tasks', click_count=2)
+    page.wait_for_timeout(300)
+    page.screenshot(path=str(SHOTS / '06-random-meta.png'))
+    page.click('#crumbs >> text=Top level')
+    page.keyboard.press('Escape')
+
     # Two linked tasks almost touching get a short forward link, not the loop-around route.
     d = page.evaluate("""(async () => {
       const G = await import('./js/graph.js'); const S = await import('./js/store.js');
