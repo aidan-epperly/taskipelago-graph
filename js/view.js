@@ -63,7 +63,7 @@ function nodeHtml(doc, n, cls = '') {
       if (rc) style.push(`--rc:${rc}`);
       const badge = n.count > 1 ? `<span class="n-badge">${n.sequential ? `1→${n.count}` : `×${n.count}`}</span>` : '';
       body = `<div class="n-head"><span class="n-icon">${icon(n.sequential && n.count > 1 ? 'list-ordered' : 'circle-check')}</span><span class="n-title${emptyCls}">${title}</span>${badge}</div>`
-        + (n.desc ? `<div class="n-sub" style="padding-bottom:2px">${taskSub(doc, n)}</div><div class="n-desc" style="margin-top:0">${esc(n.desc)}</div>`
+        + (n.desc ? `<div class="n-sub" style="padding-bottom:2px">${taskSub(doc, n)}</div><div class="n-desc" style="margin-top:0" title="${esc(n.desc)}">${esc(n.desc)}</div>`
           : `<div class="n-sub">${taskSub(doc, n) || '<span class="faint">task</span>'}</div>`);
       break;
     }

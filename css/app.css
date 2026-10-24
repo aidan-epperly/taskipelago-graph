@@ -155,7 +155,7 @@ body.dragging, body.dragging * { user-select: none !important; -webkit-user-sele
 .n-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .n-title.empty { color: var(--faint); font-weight: 500; font-style: italic; }
 .n-sub { padding: 2px 10px 8px; color: var(--muted); font-size: 11.5px; display: flex; flex-wrap: wrap; gap: 4px 8px; }
-.n-desc { padding: 0 10px 8px; color: var(--muted); font-size: 11.5px; margin-top: -4px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.n-desc { padding: 0; margin: -4px 10px 8px; color: var(--muted); font-size: 11.5px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .n-icon { width: 18px; height: 18px; display: grid; place-items: center; flex: none; color: var(--ic, var(--muted)); }
 .n-icon svg { width: 16px; height: 16px; }
 .n-badge { font-size: 11px; font-weight: 600; color: var(--muted); background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; }
