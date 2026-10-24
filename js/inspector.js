@@ -479,6 +479,7 @@ function multiPanel(nodes) {
     tasks.length >= 2 && h('button', { class: 'btn outline', onclick: () => cmd.randomizeDialog({ ids: nodes.map(x => x.id) }) }, 'Random meta-node…'),
     nodes.length === 2 && nodes.every(x => x.kind === 'task') && h('button', { class: 'btn outline', onclick: () => cmd.makeLadder(nodes.map(x => x.id)) }, 'Make a ladder from these…'),
     cmd.chainOf(nodes.map(x => x.id)) && h('button', { class: 'btn outline', onclick: () => cmd.mergeChain(nodes.map(x => x.id)) }, 'Merge into one sequential task'),
+    cmd.copiesOf(nodes.map(x => x.id)) && h('button', { class: 'btn outline', onclick: () => cmd.mergeCopies(nodes.map(x => x.id)) }, 'Merge into one task with copies'),
     h('button', { class: 'btn danger outline', onclick: () => cmd.deleteSelection() }, 'Delete')));
   if (cmd.chainOf(nodes.map(x => x.id)) && !cmd.mergeIsLossless(nodes.map(x => x.id))) {
     out.push(h('div', { class: 'hint', style: 'margin-top:6px' },
@@ -511,6 +512,8 @@ function emptyPanel() {
   const count = k => nodesOf(doc, k).length;
   return [header('Overview', doc.settings.playerName || 'Unnamed slot'),
     h('div', { class: 'muted small mt' }, `${count('task')} tasks · ${count('item')} items · ${count('region')} regions · ${count('group')} item groups`),
+    app.level && doc.nodes[app.level] && section(`Inside “${nodeTitle(doc.nodes[app.level])}”`,
+      h('button', { class: 'btn outline', onclick: () => cmd.randomizeDialog({ metaId: app.level }) }, 'Randomize links…')),
     section('Building',
       help(h('dl', {},
         h('dt', {}, 'Add'), h('dd', {}, 'Pick a node type on the left, then click the canvas.'),

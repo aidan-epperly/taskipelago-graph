@@ -297,6 +297,15 @@ def smoke(browser, url):
     check(ex['names'] == ['Cook #1', 'Cook #2', 'Cook #3'] and ex['counts'] == [1, 1, 1] and ex['pre'] == '"Shop"', f'explode as copies makes parallel copies {ex}')
     check(all(f'"Cook #{i}"' in ex['eat'] for i in (1, 2, 3)) and '||' not in ex['eat'], f'an all-of target needs every copy ({ex["eat"]})')
     check('"Read"' in ex['nap'] and all(f'"Cook #{i}"' in ex['nap'] for i in (1, 2, 3)) and '||' in ex['nap'], f'an any-one target gets an AND gate ({ex["nap"]})')
+    # ...and merge them back: the AND gate folds away and the logic is unchanged.
+    page.click('#inspector >> text=Merge into one task with copies')
+    back = page.evaluate("""(async () => { const { compile } = await import('./js/compile.js'); const d = window.__app.doc;
+      const m = compile(d).model; const t = n => m.tasks.find(x => x.name === n);
+      return { cook: [t('Cook')?.count, t('Cook')?.prereq], eat: t('Eat').prereq, nap: t('Nap').prereq,
+        gates: Object.values(d.nodes).filter(n => n.kind === 'gate' && !n.role).length, tasks: m.tasks.length }; })()""")
+    check(back == {'cook': [3, '"Shop"'], 'eat': '"Cook"', 'nap': '"Cook" || "Read"', 'gates': 0, 'tasks': 5}, f'merging copies restores one task with copies {back}')
+    page.keyboard.press('Control+z')
+    page.keyboard.press('Escape')
     page.keyboard.press('Escape')
 
     # Cost from the side panel: a new currency gets amount x copies items.
@@ -345,6 +354,12 @@ def smoke(browser, url):
     page.click('.node.meta >> text=Random tasks', click_count=2)
     page.wait_for_timeout(300)
     page.screenshot(path=str(SHOTS / '06-random-meta.png'))
+    # Randomize again from inside, with nothing selected (opening a meta-node clears the selection).
+    page.click('#inspector >> text=Randomize links')
+    page.click('#modal footer >> text=Randomize')
+    page.wait_for_timeout(300)
+    inside = page.evaluate("[window.__app.level === Object.values(window.__app.doc.nodes).find(n => n.kind === 'meta').id, Object.values(window.__app.doc.nodes).filter(n => n.kind === 'meta').length]")
+    check(inside == [True, 1], f'randomizing from inside a meta-node stays inside {inside}')
     page.click('#crumbs >> text=Top level')
     page.keyboard.press('Escape')
 

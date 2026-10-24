@@ -48,7 +48,8 @@ waits for all of them. A YAML task using `sequential` opens as that one node. *E
 as sequence* in a task's panel splits it into separate nodes, `X (1/n)` … `X (n/n)`, when
 the steps need their own descriptions or links. *Explode as copies* splits a task's copies
 into parallel nodes `X #1` … `X #n`, each with the original's requirements and costs; what
-the task unlocked still needs all of them. Selecting such a chain
+the task unlocked still needs all of them. Selecting the copies offers *Merge into one task
+with copies*. Selecting such a chain
 offers *Merge into one sequential task*, and opening a graph that has split chains
 offers to merge them all.
 
@@ -59,7 +60,7 @@ The steps are separate nodes, since a single YAML row cannot tie copy *k* to cop
 the ladder is wrapped in a meta-node by default to keep the canvas tidy.
 
 **Random meta-nodes** make deep tasks with many prerequisites. Select some tasks and pick
-*Random meta-node…*, or pick *Randomize links…* on a meta-node. The tasks inside are shuffled
+*Random meta-node…*, or pick *Randomize links…* on a meta-node (or in the side panel while inside one). The tasks inside are shuffled
 into layers. Each one needs a task from the layer before (the first layer hangs off Input),
 leads into the next layer, and can get extra prerequisites from earlier layers. The last
 layer feeds Output. *Reroll* draws again.

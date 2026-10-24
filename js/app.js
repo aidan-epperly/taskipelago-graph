@@ -233,9 +233,12 @@ function randomize(metaId, ids, opts) {
     return r && { ...r, id: meta.id };
   }, { inspector: false });
   if (!out) return;
-  delete app.views[out.id]; // fit the new layout when it is opened
-  select([out.id]);
-  toast(`Linked in ${out.layers} layer${out.layers === 1 ? '' : 's'} (${out.links} links). Open the meta-node to see them.`, {
+  const inside = app.level === out.id;
+  if (inside) { select([]); fitView(); } else {
+    delete app.views[out.id]; // fit the new layout when it is opened
+    select([out.id]);
+  }
+  toast(`Linked in ${out.layers} layer${out.layers === 1 ? '' : 's'} (${out.links} links).${inside ? '' : ' Open the meta-node to see them.'}`, {
     action: 'Reroll',
     onAction: () => { undo(); randomize(metaId, ids, opts); },
   });
@@ -486,6 +489,69 @@ function offerSequenceMerge() {
     },
     ms: 8000,
   });
+}
+
+/**
+ * The selected tasks as parallel copies of one task (what "Explode as copies"
+ * makes), or null. Merging must lose nothing: same region, description,
+ * requirements and costs, no links among them, and everything they unlock needs
+ * all of them, directly or through an AND gate fed by exactly these tasks.
+ * Returns { order, gates } with the gates to fold away.
+ */
+function copiesOf(ids) {
+  const doc = app.doc;
+  const nodes = ids.map(id => doc.nodes[id]);
+  if (nodes.length < 2 || nodes.some(n => !n || n.kind !== 'task')) return null;
+  const set = new Set(ids);
+  const [f] = nodes;
+  if (nodes.some(n => n.region !== f.region || (n.desc || '').trim() !== (f.desc || '').trim() || n.parent !== f.parent)) return null;
+  const edges = Object.values(doc.edges);
+  if (edges.some(e => set.has(e.from) && set.has(e.to))) return null;
+  const inKey = id => edges.filter(e => e.to === id).map(e => `${e.kind}|${e.from}|${JSON.stringify(e.cond || {})}`).sort().join();
+  if (nodes.some(n => inKey(n.id) !== inKey(f.id))) return null;
+  const outs = id => edges.filter(e => e.from === id).map(e => e.to);
+  const gates = [];
+  for (const to of new Set(nodes.flatMap(n => outs(n.id)))) {
+    if (!nodes.every(n => outs(n.id).includes(to))) return null;
+    const x = doc.nodes[to];
+    if (x.kind === 'gate' && !x.role && edges.filter(e => e.to === to).every(e => set.has(e.from))) {
+      if (x.op !== 'and') return null;
+      gates.push(to);
+    } else if (x.kind === 'gate' ? x.op !== 'and' : x.combine === 'or') return null;
+  }
+  const num = n => Number(/#(\d+)$/.exec(n.name || '')?.[1] ?? Infinity);
+  const order = [...nodes].sort((a, b) => num(a) - num(b) || a.y - b.y).map(n => n.id);
+  return { order, gates };
+}
+
+/** Fold parallel copies back into one task with that many copies. */
+function mergeCopies(ids) {
+  const found = copiesOf(ids);
+  if (!found) return;
+  const { order, gates } = found;
+  const set = new Set(order);
+  const firstId = order[0];
+  const base = (app.doc.nodes[firstId].name || 'Task').replace(/\s*#\d+$/, '').trim();
+  commit(d => {
+    const f = d.nodes[firstId];
+    f.name = base;
+    f.count = order.reduce((a, id) => a + Math.max(1, d.nodes[id].count || 1), 0);
+    f.sequential = false;
+    const gateSet = new Set(gates);
+    for (const [eid, e] of Object.entries(d.edges)) {
+      if (gateSet.has(e.from)) e.from = firstId;            // the AND gate's outputs come from the task
+      else if (gateSet.has(e.to) || (e.from !== firstId && set.has(e.from)) || (e.to !== firstId && set.has(e.to))) delete d.edges[eid];
+    }
+    const seen = new Set();
+    for (const [eid, e] of Object.entries(d.edges)) {
+      const key = `${e.from}|${e.to}|${e.kind}`;
+      if (seen.has(key)) delete d.edges[eid]; else seen.add(key);
+    }
+    for (const g of gates) delete d.nodes[g];
+    for (const id of order.slice(1)) delete d.nodes[id];
+  });
+  select([firstId]);
+  toast(`Merged into “${base}” with ${order.length} copies.`, { action: 'Undo', onAction: undo });
 }
 
 function mergeChain(ids, { quiet = false } = {}) {
@@ -1298,7 +1364,7 @@ initInspector({
   layoutSelection, setRegion, setGroup, openSettings: settingsDialog,
   selectOnly: id => select([id]), assignSelectionTo: startAssign, chainOf, mergeChain, makeLadder,
   mergeIsLossless: ids => { const order = chainOf(ids); return !!order && mergeIsLossless(app.doc, order); },
-  addCost, randomizeDialog,
+  addCost, randomizeDialog, mergeCopies, copiesOf: ids => !!copiesOf(ids),
 });
 
 // ------------------------------------------------------------------ boot
