@@ -126,8 +126,56 @@ function costSection(n) {
   const doc = app.doc;
   const edges = Object.values(doc.edges).filter(e => e.to === n.id && e.kind === 'cost');
   const kids = edges.map(e => relRow(doc.nodes[e.from], `spend ${e.cond?.amount || 1}`, () => cmd.selectEdge(e.id)));
-  if (!edges.length) kids.push(h('div', { class: 'faint small' }, 'Free. To add a cost, link a currency item here, then set the link to Spend.'));
-  return section('Cost', ...kids);
+  if (!edges.length) kids.push(h('div', { class: 'faint small' }, 'Free.'));
+  const form = addCostForm(n);
+  form.hidden = true;
+  const add = h('button', { class: 'btn small outline', onclick: () => {
+    form.hidden = !form.hidden;
+    if (!form.hidden) form.querySelector('select').focus();
+  } }, '+ Cost');
+  return section(['Cost', add], ...kids, form);
+}
+
+/** Pick a currency (or name a new one) and an amount; a new currency gets amount × copies items. */
+function addCostForm(n) {
+  const doc = app.doc;
+  const currencies = nodesOf(doc, 'item').filter(i => i.consumable && !i.filler);
+  const pick = h('select', { class: 'inp' },
+    currencies.map(i => h('option', { value: i.id }, nodeTitle(i))),
+    h('option', { value: '' }, '+ New currency…'));
+  const name = h('input', { class: 'inp', placeholder: 'e.g. Gold', spellcheck: 'false' });
+  const amount = h('input', { class: 'inp', type: 'number', min: 1, max: 9999, value: 1 });
+  const nameRow = field('New currency name', name);
+  const note = h('div', { class: 'hint' });
+  const err = h('div', { class: 'err' });
+  const copies = Math.max(1, n.count || 1);
+  const update = () => {
+    const isNew = !pick.value;
+    nameRow.hidden = !isNew;
+    const amt = Math.max(1, Number(amount.value) || 1);
+    note.textContent = isNew
+      ? `Creates a currency item with ${amt * copies} ${amt * copies === 1 ? 'copy' : 'copies'}${copies > 1 ? ` (${amt} for each of the ${copies} copies of this task)` : ''}.`
+      : '';
+    err.textContent = '';
+  };
+  pick.addEventListener('change', update);
+  amount.addEventListener('input', update);
+  name.addEventListener('input', update);
+  const submit = () => {
+    const nm = name.value.trim();
+    if (!pick.value) {
+      if (!nm) { err.textContent = 'Name the new currency.'; name.focus(); return; }
+      if (nm.includes('"')) { err.textContent = 'Names cannot contain quotation marks.'; return; }
+      if (nodesOf(doc, 'item').some(i => (i.name || '').trim() === nm && !i.filler)) { err.textContent = 'Another item has this name.'; return; }
+    }
+    cmd.addCost(n.id, { itemId: pick.value, name: nm, amount: amount.value });
+  };
+  name.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+  update();
+  return h('div', { class: 'cost-form', style: 'margin-top:8px' },
+    h('div', { class: 'row2' }, field('Currency', pick), field('Spend', amount)),
+    nameRow, note, err,
+    h('button', { class: 'btn small primary', onclick: submit }, 'Add cost'));
 }
 
 function nameError(n) {
@@ -427,6 +475,10 @@ function multiPanel(nodes) {
     nodes.length === 2 && nodes.every(x => x.kind === 'task') && h('button', { class: 'btn outline', onclick: () => cmd.makeLadder(nodes.map(x => x.id)) }, 'Make a ladder from these…'),
     cmd.chainOf(nodes.map(x => x.id)) && h('button', { class: 'btn outline', onclick: () => cmd.mergeChain(nodes.map(x => x.id)) }, 'Merge into one sequential task'),
     h('button', { class: 'btn danger outline', onclick: () => cmd.deleteSelection() }, 'Delete')));
+  if (cmd.chainOf(nodes.map(x => x.id)) && !cmd.mergeIsLossless(nodes.map(x => x.id))) {
+    out.push(h('div', { class: 'hint', style: 'margin-top:6px' },
+      'These steps have their own links, costs or descriptions (a ladder’s rungs, for example). Merging moves the links to the whole task and drops the rest.'));
+  }
   if (tasks.length) {
     const sel = h('select', { class: 'inp' }, h('option', { value: '' }, '— none —'),
       nodesOf(doc, 'region').map(r => h('option', { value: r.id }, r.name || 'Untitled region')),

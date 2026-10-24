@@ -37,7 +37,8 @@ link's label edits it in place (`Enter` saves, `Esc` cancels).
 - **region**: its default share, a percent of its tasks, or a number of its tasks
 - **item group**: at least N items; for progressive groups also *next in order* or
   *position N*; for other groups a percent
-- **currency → task**: required, or **spent** (a task cost)
+- **currency → task**: required, or **spent** (a task cost). *+ Cost* in a task's panel
+  can also create a new currency with enough copies for every copy of the task.
 
 Each task, region and the goal can need **all** of their requirements or **any one**.
 

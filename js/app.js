@@ -394,9 +394,29 @@ function expandedSequences(doc) {
     if (list.length !== total || total < 2) continue;
     const order = list.sort((a, b) => a[0] - b[0]).map(x => x[1]);
     const chain = chainOf(order);
-    if (chain && chain.join() === order.join()) out.push(order);
+    if (chain && chain.join() === order.join() && mergeIsLossless(doc, order)) out.push(order);
   }
   return out;
+}
+
+/**
+ * Whether merging a chain into one sequential task keeps everything: no links
+ * into a middle step or out of an early step (ladder rungs are both), the same
+ * costs on every step, and no per-step descriptions that would be dropped.
+ */
+function mergeIsLossless(doc, order) {
+  const set = new Set(order);
+  const first = order[0];
+  const last = order[order.length - 1];
+  for (const e of Object.values(doc.edges)) {
+    if (e.kind !== 'req' || (set.has(e.from) && set.has(e.to))) continue;
+    if (set.has(e.to) && e.to !== first) return false;
+    if (set.has(e.from) && e.from !== last) return false;
+  }
+  const costKey = id => Object.values(doc.edges).filter(e => e.to === id && e.kind === 'cost')
+    .map(e => `${e.from}*${e.cond?.amount || 1}`).sort().join();
+  const descs = new Set(order.map(id => (doc.nodes[id].desc || '').trim()));
+  return order.every(id => costKey(id) === costKey(first)) && descs.size === 1;
 }
 
 function offerSequenceMerge() {
@@ -448,6 +468,31 @@ function mergeChain(ids, { quiet = false } = {}) {
   if (!quiet) toast(approx
     ? `Merged into “${base}” with ${order.length} steps in order. Links on middle steps now apply to the whole sequence.`
     : `Merged into “${base}” with ${order.length} steps in order.`, { action: 'Undo', onAction: undo });
+}
+
+/**
+ * Add a cost to a task from its side panel. `itemId` spends an existing
+ * currency; otherwise a new currency item called `name` is created beside the
+ * task with enough copies to pay for every copy of the task.
+ */
+function addCost(taskId, { itemId = '', name = '', amount = 1 } = {}) {
+  const amt = Math.min(9999, Math.max(1, Math.round(Number(amount) || 1)));
+  commit(doc => {
+    const t = doc.nodes[taskId];
+    let id = itemId;
+    if (!id) {
+      const copies = Math.max(1, t.count || 1);
+      const near = Object.values(doc.edges).filter(e => e.to === t.id && e.kind === 'cost').length;
+      const it = makeNode('item', t.x - WIDTH.item - 90, t.y + near * 80,
+        { name: name.trim(), consumable: true, type: 'progression', count: Math.min(999, amt * copies) });
+      it.parent = t.parent;
+      doc.nodes[it.id] = it;
+      id = it.id;
+    }
+    const old = Object.values(doc.edges).find(e => e.from === id && e.to === t.id && e.kind === 'cost');
+    if (old) old.cond = { ...old.cond, amount: amt };
+    else addEdge(doc, id, t.id, 'cost', { amount: amt });
+  });
 }
 
 function setRegion(ids, value) {
@@ -1196,6 +1241,8 @@ initInspector({
   navigateTo, selectEdge, startLink, makeSequence, enter, ungroup: doUngroup, deleteSelection, groupSelection,
   layoutSelection, setRegion, setGroup, openSettings: settingsDialog,
   selectOnly: id => select([id]), assignSelectionTo: startAssign, chainOf, mergeChain, makeLadder,
+  mergeIsLossless: ids => { const order = chainOf(ids); return !!order && mergeIsLossless(app.doc, order); },
+  addCost,
 });
 
 // ------------------------------------------------------------------ boot

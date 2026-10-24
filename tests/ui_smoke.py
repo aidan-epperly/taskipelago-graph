@@ -266,8 +266,40 @@ def smoke(browser, url):
     check(lad == {'names': 6, 'rung': True, 'chainA': True, 'chainB': True, 'direct': False, 'meta': True}, f'ladder builds both tracks and the rungs {lad}')
     page.wait_for_timeout(500)
     check('Ready' in page.inner_text('#status-pill'), 'the ladder validates: ' + page.inner_text('#status-pill'))
+    # Reopening a saved ladder must not offer to merge its tracks (that would drop the rungs).
+    page.wait_for_timeout(600)
+    page.reload()
+    page.wait_for_timeout(1500)
+    toasts = page.evaluate("[...document.querySelectorAll('.toast')].map(t => t.textContent).join(' | ')")
+    check('separate steps' not in toasts, f'a ladder is not offered as a sequence to merge ({toasts!r})')
+    page.click('.node.meta >> text=Wipe counters / Clean the fridge', click_count=2)
+    page.click('.node.task >> text=Wipe counters (1/3)')
+    for t in ('Wipe counters (2/3)', 'Wipe counters (3/3)'):
+        page.click(f'.node.task >> text={t}', modifiers=['Shift'])
+    check('drops the rest' in page.inner_text('#inspector'), 'merging one ladder track warns that its rungs move')
+    page.click('#crumbs >> text=Top level')
     page.keyboard.press('Escape')
-    page.keyboard.press('Control+z')
+
+    # Cost from the side panel: a new currency gets amount x copies items.
+    page.evaluate("""(async () => {
+      const G = await import('./js/graph.js'); const S = await import('./js/store.js');
+      const doc = G.emptyDoc();
+      const t = G.makeNode('task', 300, 0, { name: 'Vacuum', count: 3, sequential: true });
+      doc.nodes[t.id] = t; S.replaceDoc(doc);
+    })()""")
+    page.click('.node.task >> text=Vacuum')
+    page.click('#inspector >> text=+ Cost')
+    page.fill('#inspector .cost-form input[type=number]', '2')
+    page.fill('#inspector .cost-form input[placeholder="e.g. Gold"]', 'Gold')
+    check('6 copies' in page.inner_text('#inspector .cost-form'), 'the cost form says how many currency copies it makes')
+    page.click('#inspector >> text=Add cost')
+    cost = page.evaluate("""(async () => { const { compile } = await import('./js/compile.js');
+      const d = window.__app.doc; const gold = Object.values(d.nodes).find(n => n.name === 'Gold');
+      const m = compile(d).model;
+      return { consumable: !!gold?.consumable, count: gold?.count, cost: m.tasks.find(x => x.name === 'Vacuum').cost }; })()""")
+    check(cost == {'consumable': True, 'count': 6, 'cost': '"Gold"*2'}, f'adding a new currency cost from the panel {cost}')
+    check('spend 2' in page.inner_text('#inspector'), 'the new cost is listed in the panel')
+    page.keyboard.press('Escape')
 
     # Two linked tasks almost touching get a short forward link, not the loop-around route.
     d = page.evaluate("""(async () => {
