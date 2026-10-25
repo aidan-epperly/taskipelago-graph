@@ -308,8 +308,68 @@ export async function exportYaml(doc, { answer = true } = {}) {
     problems.push({ level: 'error', title, msg: message });
   }
   for (const p of prompts) problems.push({ level: 'warning', title: p.title, msg: p.message });
+  if (result.data) numberDigitNames(result.data.Taskipelago);
   const ok = !!result.data && !problems.some(p => p.level === 'error');
   return { ok, data: result.data, text: result.data ? exportText(result.data) : '', problems, prompts, compiled: c };
+}
+
+/**
+ * Whether the apworld would misread a quoted name. When it expands task copies it
+ * renumbers prereq text with a tokenizer that does not skip quoted names, so a
+ * number standing on its own inside one ("Laundry (1/4)", "Meditate #2", "Work 4
+ * Hours") is taken for a row number. Mirrors _translate_prereq_indices.
+ */
+export function apworldMisreads(name) {
+  const text = `"${name}"`;
+  for (let i = 0; i < text.length;) {
+    const c = text[i];
+    if (/[A-Za-z_]/.test(c)) {
+      while (i < text.length && !/[\s(),]/.test(text[i]) && !['&&', '||'].includes(text.slice(i, i + 2))) i++;
+    } else if (/\d/.test(c)) return true;
+    else i++;
+  }
+  return false;
+}
+
+/**
+ * Refer to misread task and item names by row number instead, in the fields the
+ * apworld renumbers before resolving names: task_prereqs, item_prereqs and the
+ * task(...) / item(...) scopes of region_prereqs. Row numbers are what that step
+ * expects, so they come through intact. goal_tasks resolves names first and is left alone.
+ */
+function numberDigitNames(T) {
+  const taskRow = new Map(T.tasks.map((n, i) => [n, i + 1]));
+  const itemRow = new Map();
+  T.items.forEach((n, i) => { if (!T.item_fillers[i] && !itemRow.has(n)) itemRow.set(n, i + 1); });
+  const rewrite = (text, home) => {
+    if (!text || !text.includes('"')) return text;
+    let out = '';
+    const scopes = [home];
+    for (let i = 0; i < text.length;) {
+      const m = /^(task|item)\s*\(/.exec(text.slice(i));
+      if (m && !/[A-Za-z0-9_\-]/.test(text[i - 1] || '')) { scopes.push(m[1]); out += m[0]; i += m[0].length; continue; }
+      const c = text[i];
+      if (c === '(') { scopes.push(scopes[scopes.length - 1]); out += c; i++; continue; }
+      if (c === ')') { if (scopes.length > 1) scopes.pop(); out += c; i++; continue; }
+      if (c === '"') {
+        const j = text.indexOf('"', i + 1);
+        if (j < 0) { out += text.slice(i); break; }
+        const name = text.slice(i + 1, j);
+        const scope = scopes[scopes.length - 1];
+        const copies = text[j + 1] === '*';           // "item"*N is resolved before renumbering
+        const row = scope === 'task' ? taskRow.get(name) : scope === 'item' ? itemRow.get(name) : null;
+        out += row && !copies && apworldMisreads(name) ? String(row) : text.slice(i, j + 1);
+        i = j + 1;
+        continue;
+      }
+      out += c;
+      i++;
+    }
+    return out;
+  };
+  T.task_prereqs = T.task_prereqs.map(t => rewrite(t, 'task'));
+  T.item_prereqs = T.item_prereqs.map(t => rewrite(t, 'item'));
+  T.region_prereqs = T.region_prereqs.map(t => rewrite(t, 'region'));
 }
 
 /** Swap "Task 3" / "task 3" / "item 2" in generator messages for node names. */

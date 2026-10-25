@@ -2,7 +2,7 @@
 
 import { addEdge, canMoveInto, emptyDoc, goalNode, groupInto, makeNode, moveInto } from '../js/graph.js';
 import { randomizeMeta } from '../js/randomize.js';
-import { compile, exportYaml } from '../js/compile.js';
+import { apworldMisreads, compile, exportYaml } from '../js/compile.js';
 import { importYaml, withEmbeddedLayout } from '../js/importer.js';
 import { exampleDoc } from '../js/example.js';
 
@@ -224,6 +224,29 @@ export async function runUnit() {
     if (moved.join() !== [b.id, c.id].join()) return `moved ${moved}`;
     if (b.parent !== inner.id || !doc.edges[e.id]) return 'link or parent lost';
     return true;
+  });
+
+  await t('names the apworld would misread are exported as row numbers', async () => {
+    const bad = ['Laundry (1/4)', 'Meditate #2', 'Work 4 Hours', '4am run'];
+    const good = ['Item7', 'Go On a Hike', 'Kitchen-50'];
+    for (const n of bad) if (!apworldMisreads(n)) return `${n} should be flagged`;
+    for (const n of good) if (apworldMisreads(n)) return `${n} should not be flagged`;
+    const { doc } = build({
+      nodes: [['Laundry (1/4)', 'task', {}], ['Laundry (2/4)', 'task', {}], ['Hike', 'task', {}], ['After', 'task', {}]],
+      edges: [['Laundry (1/4)', 'Laundry (2/4)'], ['Laundry (2/4)', 'After'], ['Hike', 'After']],
+    });
+    const r = await exportYaml(doc);
+    if (!r.ok) return r.problems.map(p => p.msg).join('; ');
+    const T = r.data.Taskipelago;
+    const row = n => String(T.tasks.indexOf(n) + 1);
+    const pre = n => T.task_prereqs[T.tasks.indexOf(n)];
+    if (pre('Laundry (2/4)') !== row('Laundry (1/4)')) return `got ${pre('Laundry (2/4)')}`;
+    if (!pre('After').includes(row('Laundry (2/4)')) || !pre('After').includes('"Hike"')) return `got ${pre('After')}`;
+    // Reopened without the layout comment, the numbers come back as the same links.
+    const back = await importYaml(r.text);
+    const names = Object.values(back.doc.edges).map(e => `${back.doc.nodes[e.from]?.name}>${back.doc.nodes[e.to]?.name}`).sort();
+    const want = ['Hike>After', 'Laundry (1/4)>Laundry (2/4)', 'Laundry (2/4)>After'];
+    return want.every(w => names.includes(w)) || `re-import links ${names}`;
   });
 
   return results;
