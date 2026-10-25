@@ -59,6 +59,10 @@ builds one from that task, and with two tasks selected *Make a ladder from these
 The steps are separate nodes, since a single YAML row cannot tie copy *k* to copy *k*, and
 the ladder is wrapped in a meta-node by default to keep the canvas tidy.
 
+To add nodes to an existing **meta-node**, pick *+ Add nodes* in its panel and click them,
+or use *Move into* in any node's panel (or a selection's). *Move into → Top level* moves
+nodes back out. Links are kept.
+
 **Random meta-nodes** make deep tasks with many prerequisites. Select some tasks and pick
 *Random meta-node…*, or pick *Randomize links…* on a meta-node (or in the side panel while inside one). The tasks inside are shuffled
 into layers. Each one needs a task from the layer before (the first layer hangs off Input),

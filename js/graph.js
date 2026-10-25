@@ -271,6 +271,37 @@ export function groupInto(doc, ids, name = 'Group') {
   return meta;
 }
 
+/** Whether `id` can be moved into level `target` (a meta-node id, or null for the top level). */
+export function canMoveInto(doc, id, target) {
+  const n = doc.nodes[id];
+  if (!n || n.kind === 'goal' || n.role) return false;
+  if ((n.parent || null) === (target || null)) return false;
+  if (target && (target === id || ancestors(doc, target).includes(id))) return false;
+  return !target || doc.nodes[target]?.kind === 'meta';
+}
+
+/**
+ * Move nodes into level `target`, keeping their links. They keep their
+ * arrangement and are placed below what is already there.
+ */
+export function moveInto(doc, ids, target) {
+  const moving = ids.filter(id => canMoveInto(doc, id, target)).map(id => doc.nodes[id]);
+  if (!moving.length) return [];
+  const set = new Set(moving.map(n => n.id));
+  const there = Object.values(doc.nodes).filter(n => (n.parent || null) === (target || null) && !n.role && !set.has(n.id));
+  const mx = Math.min(...moving.map(n => n.x));
+  const my = Math.min(...moving.map(n => n.y));
+  const x0 = there.length ? Math.min(...there.map(n => n.x)) : mx;
+  const y0 = there.length ? Math.max(...there.map(n => n.y)) + 120 : my;
+  for (const n of moving) {
+    n.x = x0 + n.x - mx;
+    n.y = y0 + n.y - my;
+    n.parent = target || null;
+  }
+  if (target) ensurePorts(doc, doc.nodes[target]);
+  return moving.map(n => n.id);
+}
+
 /** Dissolve a meta-node, putting its children back at its level. */
 export function ungroup(doc, metaId) {
   const m = doc.nodes[metaId];

@@ -1,6 +1,6 @@
 // Unit checks for the compiler, generation rules and the YAML round trip.
 
-import { addEdge, emptyDoc, goalNode, groupInto, makeNode } from '../js/graph.js';
+import { addEdge, canMoveInto, emptyDoc, goalNode, groupInto, makeNode, moveInto } from '../js/graph.js';
 import { randomizeMeta } from '../js/randomize.js';
 import { compile, exportYaml } from '../js/compile.js';
 import { importYaml, withEmbeddedLayout } from '../js/importer.js';
@@ -206,6 +206,23 @@ export async function runUnit() {
       const c = compile(doc);
       if (errorsOf(c).length) return errorsOf(c).join('; ');
     }
+    return true;
+  });
+
+  await t('moving into a meta-node keeps links and refuses cycles', async () => {
+    const doc = emptyDoc();
+    const add = name => { const n = makeNode('task', 0, 0, { name }); doc.nodes[n.id] = n; return n; };
+    const a = add('A'); const b = add('B'); const c = add('C');
+    const outer = groupInto(doc, [a.id], 'Outer');
+    const inner = groupInto(doc, [a.id], 'Inner');
+    const e = addEdge(doc, b.id, c.id);
+    if (canMoveInto(doc, outer.id, inner.id)) return 'a meta-node went into its own child';
+    if (canMoveInto(doc, outer.id, outer.id)) return 'a meta-node went into itself';
+    if (canMoveInto(doc, goalNode(doc).id, outer.id)) return 'the goal moved';
+    if (canMoveInto(doc, outer.input, inner.id)) return 'a port moved';
+    const moved = moveInto(doc, [b.id, c.id, outer.id], inner.id);
+    if (moved.join() !== [b.id, c.id].join()) return `moved ${moved}`;
+    if (b.parent !== inner.id || !doc.edges[e.id]) return 'link or parent lost';
     return true;
   });
 

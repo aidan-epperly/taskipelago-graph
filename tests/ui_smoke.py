@@ -308,6 +308,37 @@ def smoke(browser, url):
     page.keyboard.press('Escape')
     page.keyboard.press('Escape')
 
+    # Add tasks to an existing meta-node: from the "Move into" field and by clicking.
+    page.evaluate("""(async () => {
+      const G = await import('./js/graph.js'); const S = await import('./js/store.js');
+      const doc = G.emptyDoc(); doc.settings.playerName = 'Tester';
+      const add = (x, y, name) => { const n = G.makeNode('task', x, y, { name }); doc.nodes[n.id] = n; return n; };
+      const a = add(0, 0, 'Inner'); const b = add(0, 300, 'Walk'); const c = add(0, 500, 'Swim');
+      const m = G.groupInto(doc, [a.id], 'Box'); m.x = 400; m.y = 0;
+      G.addEdge(doc, m.output, G.goalNode(doc).id);
+      S.replaceDoc(doc);
+    })()""")
+    page.click('.node.task >> text=Walk')
+    page.select_option('#inspector section:has-text("Move into") select', label='Box')
+    page.wait_for_timeout(200)
+    page.click('.node.meta >> text=Box')
+    page.click('#inspector >> text=+ Add nodes')
+    page.click('.node.task >> text=Swim')
+    page.keyboard.press('Escape')
+    mv = page.evaluate("""(async () => { const { compile } = await import('./js/compile.js'); const d = window.__app.doc;
+      const m = Object.values(d.nodes).find(n => n.kind === 'meta'); const p = n => Object.values(d.nodes).find(x => x.name === n).parent === m.id;
+      return { walk: p('Walk'), swim: p('Swim'), goal: compile(d).model.goalTasks }; })()""")
+    check(mv['walk'] and mv['swim'], f'tasks move into an existing meta-node {mv}')
+    check(all(f'"{t}"' in mv['goal'] for t in ('Inner', 'Walk', 'Swim')), f'an unwired Output then covers the added tasks ({mv["goal"]})')
+    page.click('.node.meta >> text=Box', click_count=2)
+    page.click('.node.task >> text=Walk')
+    page.select_option('#inspector section:has-text("Move into") select', label='Top level')
+    page.wait_for_timeout(200)
+    out = page.evaluate("Object.values(window.__app.doc.nodes).find(x => x.name === 'Walk').parent")
+    check(out is None, f'"Top level" moves a task back out ({out})')
+    page.click('#crumbs >> text=Top level')
+    page.keyboard.press('Escape')
+
     # Cost from the side panel: a new currency gets amount x copies items.
     page.evaluate("""(async () => {
       const G = await import('./js/graph.js'); const S = await import('./js/store.js');

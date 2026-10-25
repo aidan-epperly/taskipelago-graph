@@ -1,7 +1,7 @@
 // Editor controller: input handling, commands, validation, files.
 
 import {
-  addEdge, ancestors, childrenOf, edgeProblem, emptyDoc, groupInto, makeNode, newId, nextRegionColor, portFor, repAt,
+  addEdge, ancestors, canMoveInto, childrenOf, edgeProblem, moveInto, emptyDoc, groupInto, makeNode, newId, nextRegionColor, portFor, repAt,
   nodeTitle, normalizeDoc, nodesOf, deleteNodes, ungroup, SOURCE_KINDS, WIDTH,
 } from './graph.js';
 import { exportYaml, linkMessage } from './compile.js';
@@ -697,7 +697,9 @@ function setMode(mode) {
     place: () => `Click the canvas to place the ${mode.kind.startsWith('gate') ? `${mode.kind.slice(5).toUpperCase()} gate` : mode.kind === 'group' ? 'item group' : mode.kind}`,
     link: () => (mode.dir === 'out' ? `Click each node that ${linkSubject()} unlocks` : `Click each node that ${linkSubject()} requires`),
     move: () => 'Glide to the new spot, then click to drop',
-    assign: () => `Click ${app.doc.nodes[mode.target]?.kind === 'region' ? 'tasks' : 'items'} to add to or remove from ${nodeTitle(app.doc.nodes[mode.target])}`,
+    assign: () => (app.doc.nodes[mode.target]?.kind === 'meta'
+      ? `Click nodes to move them into ${nodeTitle(app.doc.nodes[mode.target])}`
+      : `Click ${app.doc.nodes[mode.target]?.kind === 'region' ? 'tasks' : 'items'} to add to or remove from ${nodeTitle(app.doc.nodes[mode.target])}`),
   }[mode.type];
   bar.classList.toggle('on', !!text);
   $('modebar-text').textContent = text ? text() : '';
@@ -772,7 +774,26 @@ function toggleAssign(id) {
   if (!t || !n) return;
   if (t.kind === 'region' && n.kind === 'task') commit(() => { n.region = n.region === t.id ? '' : t.id; }, { inspector: false });
   else if (t.kind === 'group' && n.kind === 'item') commit(() => { n.group = n.group === t.id ? '' : t.id; if (n.group) n.consumable = false; }, { inspector: false });
+  else if (t.kind === 'meta') moveIntoMeta([id], t.id, { keepSelection: true });
   else toast(t.kind === 'region' ? 'Only tasks join regions.' : 'Only items join item groups.');
+}
+
+/** Move nodes into a meta-node (or `null`: the top level), keeping their links. */
+function moveIntoMeta(ids, target, { keepSelection = false } = {}) {
+  const doc = app.doc;
+  const ok = ids.filter(id => canMoveInto(doc, id, target));
+  const where = target ? `“${nodeTitle(doc.nodes[target])}”` : 'the top level';
+  if (!ok.length) { toast(`That cannot go into ${where}.`); return; }
+  commit(d => moveInto(d, ok, target), { inspector: !keepSelection });
+  if (!keepSelection) select([]);
+  // An unwired Output stands for "every task inside is done", which now includes these.
+  const m = target && doc.nodes[target];
+  const out = m && doc.nodes[m.output];
+  const unwired = out && !Object.values(doc.edges).some(e => e.to === out.id) && Object.values(doc.edges).some(e => e.from === out.id);
+  const tasks = ok.some(id => doc.nodes[id].kind === 'task' || doc.nodes[id].kind === 'meta');
+  toast(`Moved ${ok.length === 1 ? `“${nodeTitle(doc.nodes[ok[0]])}”` : `${ok.length} nodes`} into ${where}.`
+    + (unwired && tasks ? ' Its Output is not wired, so what it unlocks now waits for these too.' : ''),
+  { action: 'Undo', onAction: undo });
 }
 
 function cancelMode() {
@@ -1364,7 +1385,7 @@ initInspector({
   layoutSelection, setRegion, setGroup, openSettings: settingsDialog,
   selectOnly: id => select([id]), assignSelectionTo: startAssign, chainOf, mergeChain, makeLadder,
   mergeIsLossless: ids => { const order = chainOf(ids); return !!order && mergeIsLossless(app.doc, order); },
-  addCost, randomizeDialog, mergeCopies, copiesOf: ids => !!copiesOf(ids),
+  addCost, randomizeDialog, moveIntoMeta, mergeCopies, copiesOf: ids => !!copiesOf(ids),
 });
 
 // ------------------------------------------------------------------ boot

@@ -3,7 +3,7 @@
 import { REGION_COLOR_PALETTE, REWARD_TYPE_VALUES, MAX_TASK_DESCRIPTION_LEN } from '../vendor/taskipelago/js/generator/model.js';
 import { KIND_LABELS } from '../vendor/taskipelago/js/generator/clicker_fields.js';
 import { validateRefName } from '../vendor/taskipelago/js/shared/prereq_parser.js';
-import { condLabel, descendants, nodeTitle, nodesOf } from './graph.js';
+import { ancestors, canMoveInto, condLabel, descendants, nodeTitle, nodesOf } from './graph.js';
 import { app, commit, selectedNodes } from './store.js';
 import { effectiveType } from './view.js';
 
@@ -256,7 +256,7 @@ function taskPanel(n) {
     field('Extra task prereq', text(n, 'extraPrereq', { mono: true, placeholder: 'e.g. Kitchen-50 || "Other task"' }), 'ANDed with the links above. Task numbers, quoted names, region refs, item(...).'),
     field('Extra item prereq', text(n, 'extraItemPrereq', { mono: true, placeholder: 'e.g. keys*2' })),
     field('Extra cost', text(n, 'extraCost', { mono: true, placeholder: 'e.g. "Gold"*5 || "Silver"*10' }), 'For costs with alternatives.')));
-  out.push(deleteRow());
+  out.push(moveField([n.id]), deleteRow());
   return out;
 }
 
@@ -287,7 +287,7 @@ function itemPanel(n) {
         field('Target', text(n, 'clickerTarget', { mono: true, placeholder: '*' }), '"Task", region or *'),
         field('Value', text(n, 'clickerValue', { mono: true, placeholder: '1' })))));
   }
-  out.push(deleteRow());
+  out.push(moveField([n.id]), deleteRow());
   return out;
 }
 
@@ -318,7 +318,7 @@ function regionPanel(n) {
       field('Offline rate', text(n, 'offlineRate', { mono: true, placeholder: 'inherit' }))));
   }
   out.push(advanced(field('Extra dependency', text(n, 'extraPrereq', { mono: true, placeholder: 'e.g. Kitchen-50 && task(3)' }), 'ANDed with the links above.')));
-  out.push(deleteRow());
+  out.push(moveField([n.id]), deleteRow());
   return out;
 }
 
@@ -339,7 +339,7 @@ function groupPanel(n) {
     ...(members.length ? members.map(i => relRow(i, i.count > 1 ? `×${i.count}` : ''))
       : [h('div', { class: 'faint small' }, 'Use “+ Add items” and click items, or set an item’s group in its panel.')])));
   out.push(linksSection(n, 'out'));
-  out.push(deleteRow());
+  out.push(moveField([n.id]), deleteRow());
   return out;
 }
 
@@ -361,7 +361,7 @@ function gatePanel(n) {
   return [header('Logic gate', n.op.toUpperCase()),
     field('Passes when', seg([['and', 'All inputs (AND)'], ['or', 'Any input (OR)']], n.op, v => commit(() => { n.op = v; }))),
     help('Gates build nested rules, like “(A and B) or C”. Link requirements into the gate, then link the gate to what it unlocks.'),
-    linksSection(n, 'in'), linksSection(n, 'out'), deleteRow()];
+    linksSection(n, 'in'), linksSection(n, 'out'), moveField([n.id]), deleteRow()];
 }
 
 function goalPanel(n) {
@@ -389,8 +389,9 @@ function metaPanel(n) {
       h('button', { class: 'btn outline', onclick: () => cmd.randomizeDialog({ metaId: n.id }) }, 'Randomize links…')),
     help(h('p', {}, 'Links into this card go to the meta-node’s Input, and links out of it start at its Output; open it to wire them to the nodes inside. An Output with nothing linked into it means every task inside is done.')),
     portLinks(n, 'input'), portLinks(n, 'output'),
-    section(`Contents (${all.length})`, ...kids.slice(0, 60).map(k => relRow(k, k.kind))),
-    deleteRow('Delete with contents')];
+    section([`Contents (${all.length})`, h('button', { class: 'btn small outline', onclick: () => cmd.assignSelectionTo(n.id) }, '+ Add nodes')],
+      ...kids.filter(k => !k.role).slice(0, 60).map(k => relRow(k, k.kind))),
+    moveField([n.id]), deleteRow('Delete with contents')];
 }
 
 /** The meta-node's outside links, through its Input or Output gate. */
@@ -412,7 +413,7 @@ function portLinks(meta, which) {
 }
 
 function notePanel(n) {
-  return [header('Note', 'Note'), field('Text', text(n, 'text', { area: true, placeholder: 'Anything. Notes are never exported.' })), deleteRow()];
+  return [header('Note', 'Note'), field('Text', text(n, 'text', { area: true, placeholder: 'Anything. Notes are never exported.' })), moveField([n.id]), deleteRow()];
 }
 
 // ------------------------------------------------------------------ links
@@ -503,6 +504,7 @@ function multiPanel(nodes) {
     sel.addEventListener('change', () => cmd.setGroup(items.map(t => t.id), sel.value));
     out.push(section(`Items (${items.length})`, field('Set item group', sel)));
   }
+  out.push(moveField(nodes.map(n => n.id)));
   out.push(section('Nodes', ...nodes.slice(0, 50).map(n => relRow(n, n.kind, () => cmd.selectOnly(n.id)))));
   return out;
 }
@@ -526,6 +528,21 @@ function emptyPanel() {
       ))),
     section('Slot',
       h('button', { class: 'btn outline', onclick: () => cmd.openSettings() }, 'Slot settings…'))];
+}
+
+/** "Move into" a meta-node (or out to the top level), for the nodes `ids`. */
+function moveField(ids) {
+  const doc = app.doc;
+  const path = m => [...ancestors(doc, m.id).reverse().map(a => nodeTitle(doc.nodes[a])), nodeTitle(m)].join(' › ');
+  const metas = nodesOf(doc, 'meta').filter(m => ids.some(id => canMoveInto(doc, id, m.id)))
+    .map(m => [m.id, path(m)]).sort((a, b) => a[1].localeCompare(b[1]));
+  const top = ids.some(id => canMoveInto(doc, id, null));
+  if (!metas.length && !top) return null;
+  const sel = h('select', { class: 'inp' }, h('option', { value: '' }, '— pick a meta-node —'),
+    top && h('option', { value: '__top' }, 'Top level'),
+    metas.map(([id, label]) => h('option', { value: id }, label)));
+  sel.addEventListener('change', () => { if (sel.value) cmd.moveIntoMeta(ids, sel.value === '__top' ? null : sel.value); });
+  return section('Move into', sel);
 }
 
 const deleteRow = (label = 'Delete') => h('section', {},
